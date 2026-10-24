@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>KER ランダム動画ガチャ</title>
+<style>
+:root{--bg:#f7f4ed;--ink:#20221f;--muted:#686b63;--accent:#e95b3f;--card:#fffdf8;--line:#e6e0d5}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 10% 0%,#ffe5d8 0,transparent 30%),var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Noto Sans JP",sans-serif}
+main{max-width:780px;margin:0 auto;padding:36px 20px 56px}.eyebrow{font-size:12px;letter-spacing:.16em;font-weight:800;color:var(--accent)}
+h1{font-size:clamp(32px,7vw,54px);line-height:1.12;letter-spacing:-.04em;margin:12px 0}p{line-height:1.7}.lead{color:var(--muted);margin:0 0 26px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:24px;padding:clamp(18px,4vw,30px);box-shadow:0 14px 40px #3324110b}
+button{font:inherit;border:0;border-radius:14px;padding:14px 18px;font-weight:800;cursor:pointer;transition:transform .12s,opacity .12s}
+button:active{transform:scale(.98)}button:disabled{opacity:.5;cursor:wait}
+.primary{background:var(--accent);color:white;width:100%;font-size:18px;padding:17px}
+.secondary{background:#eee9df;color:var(--ink)}.small{font-size:13px;padding:10px 12px}
+label{display:block;font-size:13px;font-weight:750;margin:14px 0 7px}input{width:100%;font:inherit;padding:12px;border:1px solid #d9d1c5;border-radius:12px;background:white}
+.setup{margin-top:18px;border-top:1px solid var(--line);padding-top:14px}.setup summary{font-weight:750;cursor:pointer}.hint{font-size:12px;color:var(--muted)}
+.status{font-size:13px;color:var(--muted);min-height:22px;margin:12px 0}.video{display:none;margin-top:22px}.video.show{display:block}.thumb{width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:16px;background:#eee}.video h2{font-size:clamp(20px,4vw,27px);line-height:1.45;margin:14px 0 8px}.meta{font-size:12px;color:var(--muted);margin-bottom:16px}.actions{display:flex;gap:10px;flex-wrap:wrap}.actions a{display:inline-block;text-decoration:none}.notice{font-size:12px;color:var(--muted);margin-top:18px}.pill{display:inline-block;background:#f9e4dc;color:#a33c27;padding:6px 10px;border-radius:99px;font-size:11px;font-weight:800;margin-bottom:12px}
+footer{text-align:center;color:var(--muted);font-size:12px;margin-top:24px}a{color:inherit}
+</style>
+</head>
+<body>
+<main>
+  <div class="eyebrow">KEVIN'S ENGLISH ROOM · RANDOM PICKER</div>
+  <h1>次に見るKER、<br>ガチャで決めよう。</h1>
+  <p class="lead">「何見よう？」で迷ったら、ボタンひとつ。チャンネルの動画からランダムに1本選びます。</p>
+  <section class="card">
+    <span class="pill">KER VIDEO GACHA</span>
+    <button class="primary" id="draw">🎲 ランダムに1本選ぶ</button>
+    <div class="status" id="status" role="status">最初にYouTube Data APIキーを設定すると、公開動画を取得できます。</div>
+    <article class="video" id="video">
+      <a id="thumbLink" target="_blank" rel="noopener"><img class="thumb" id="thumb" alt="動画サムネイル"></a>
+      <h2 id="title"></h2>
+      <div class="meta" id="meta"></div>
+      <div class="actions">
+        <a id="watch" target="_blank" rel="noopener"><button class="primary" style="width:auto">▶ YouTubeで見る</button></a>
+        <button class="secondary" id="again">もう1回ガチャ</button>
+      </div>
+    </article>
+    <details class="setup" id="settings">
+      <summary>⚙ 初回設定（YouTube APIキー）</summary>
+      <p class="hint">このページ単体でYouTubeの全動画一覧を安定して取得するには、GoogleのYouTube Data APIキーが必要です。キーはこのページ内だけで使い、サーバーには送信しません。利用上限やキーの制限はGoogle Cloud側で設定してください。</p>
+      <label for="apiKey">YouTube Data API v3 キー</label>
+      <input id="apiKey" type="password" autocomplete="off" placeholder="AIza...">
+      <div class="actions" style="margin-top:10px">
+        <button class="secondary" id="load">動画一覧を読み込む</button>
+        <button class="secondary" id="clear">キーを消す</button>
+      </div>
+      <p class="hint">Google Cloudでプロジェクトを作成し、「YouTube Data API v3」を有効化してAPIキーを発行してください。チャンネルIDは設定済みです。</p>
+    </details>
+  </section>
+  <p class="notice">公開されている動画を対象にします。非公開・削除済み動画は取得できません。APIキーと動画一覧はこのブラウザのローカル保存領域に保存され、次回は入力・取得を省略できる場合があります。共有端末では使わず、不要になったら「キーを消す」を押してください。</p>
+  <footer><a href="https://www.youtube.com/@KevinsEnglishRoom/" target="_blank" rel="noopener">Kevin's English Room 公式チャンネル ↗</a></footer>
+</main>
+<script>
+const CHANNEL_ID = "UCFbp2XdRpKfk7mYt_uT8dxw";
+const UPLOADS_PLAYLIST = "UU" + CHANNEL_ID.slice(2);
+let videos = [];
+const $ = id => document.getElementById(id);
+function setStatus(s){$("status").textContent=s}
+function fmtDate(s){if(!s)return "";return new Date(s).toLocaleDateString("ja-JP",{year:"numeric",month:"long",day:"numeric"})}
+async function loadVideos(){
+  const key=$("apiKey").value.trim();
+  if(!key){setStatus("APIキーを入力してください。");$("settings").open=true;return}
+  $("load").disabled=true;$("draw").disabled=true;setStatus("動画一覧を取得中… 本数によっては少し時間がかかります。");
+  try{
+    let token="",all=[],page=0;
+    do{
+      const url=new URL("https://www.googleapis.com/youtube/v3/playlistItems");
+      url.searchParams.set("part","snippet,contentDetails");url.searchParams.set("playlistId",UPLOADS_PLAYLIST);
+      url.searchParams.set("maxResults","50");url.searchParams.set("key",key);
+      if(token)url.searchParams.set("pageToken",token);
+      const res=await fetch(url);
+      const data=await res.json();
+      if(!res.ok)throw new Error(data.error?.message||"YouTube APIでエラーが発生しました");
+      for(const item of (data.items||[])){
+        const s=item.snippet||{}, id=item.contentDetails?.videoId||s.resourceId?.videoId;
+        if(id && s.title && s.title!=="Private video" && s.title!=="Deleted video")
+          all.push({id,title:s.title,date:s.publishedAt||item.contentDetails?.videoPublishedAt,thumb:s.thumbnails?.maxres?.url||s.thumbnails?.high?.url||s.thumbnails?.medium?.url||s.thumbnails?.default?.url});
+      }
+      token=data.nextPageToken||"";page++;
+      setStatus(`動画一覧を取得中… ${all.length}本`);
+      if(page>100)break;
+    }while(token);
+    const seen=new Set();all=all.filter(v=>!seen.has(v.id)&&seen.add(v.id));
+    // Exclude videos whose title contains #shorts, ignoring letter case.
+    videos=all.filter(v=>!/#shorts\b/i.test(v.title));
+    if(!videos.length)throw new Error("タイトルに「#shorts」を含む動画を除外した結果、動画が見つかりませんでした。");
+    setStatus(`${videos.length}本の動画を読み込みました（タイトルに #shorts を含む動画を除外）。ガチャを回してね！`);
+    try {
+      localStorage.setItem("kerRandomApiKey", key);
+      localStorage.setItem("kerRandomVideos", JSON.stringify(videos));
+    } catch(e) {
+      setStatus(`${videos.length}本を読み込みました。ブラウザが保存を許可しないため、次回は再読み込みが必要かもしれません。`);
+    }
+    $("settings").open=false;
+    drawRandom();
+  }catch(e){setStatus("取得できませんでした: "+e.message+"（APIキー、API有効化、利用上限を確認してください）")}
+  finally{$("load").disabled=false;$("draw").disabled=false}
+}
+function drawRandom(){
+  if(!videos.length){$("settings").open=true;setStatus("まずAPIキーを設定して、動画一覧を読み込んでください。");return}
+  const v=videos[Math.floor(Math.random()*videos.length)];
+  $("title").textContent=v.title;$("thumb").src=v.thumb||`https://i.ytimg.com/vi/${v.id}/hqdefault.jpg`;
+  $("thumb").alt=v.title;$("meta").textContent=`公開日：${fmtDate(v.date)}　·　候補 ${videos.length}本からランダム選出`;
+  const url=`https://www.youtube.com/watch?v=${v.id}`;
+  $("watch").href=url;$("thumbLink").href=url;$("video").classList.add("show");
+}
+// Save the key and video list in this browser on this device.
+try {
+  const savedKey = localStorage.getItem("kerRandomApiKey");
+  if (savedKey) $("apiKey").value = savedKey;
+  const savedVideos = localStorage.getItem("kerRandomVideos");
+  if (savedVideos) {
+    const parsed = JSON.parse(savedVideos);
+    if (Array.isArray(parsed) && parsed.length) {
+      videos = parsed;
+      setStatus(`${videos.length}本の動画を保存済み一覧から復元しました。すぐにガチャを回せるよ！`);
+    }
+  }
+} catch(e) {}
+$("apiKey").addEventListener("change",()=>{try{localStorage.setItem("kerRandomApiKey",$("apiKey").value.trim())}catch(e){}});
+$("load").addEventListener("click",loadVideos);
+$("draw").addEventListener("click",drawRandom);
+$("again").addEventListener("click",drawRandom);
+$("clear").addEventListener("click",()=>{
+  $("apiKey").value="";videos=[];$("video").classList.remove("show");
+  try { localStorage.removeItem("kerRandomApiKey");localStorage.removeItem("kerRandomVideos"); } catch(e){}
+  setStatus("保存したAPIキーと動画一覧をクリアしました。");
+});
+</script>
+</body>
+</html>
